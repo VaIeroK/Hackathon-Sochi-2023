@@ -3,10 +3,14 @@ import json
 import os
 from decimal import Decimal
 
-ignore_structures = { "restaurant", "parking", "cafe", "fuel" } #Игнор популярных структур для оптимизации
+region_structures = { "school", "kindergarten", "language_school", "music_school", "college", "university", "driving_school", "training" }
+city_structures = { "theme_park", "zoo", "national_park", "park", "water_park", "trampoline_park", "fountain", "place_of_worship" }
+positive_structures = { "civic", "stadium", "riding_hall", "sports_hall", "cycleway", "ice_rink", "footway", "pitch", "track", "marketplace", "greengrocer", "farm" }
+negative_structures = { "tobacco", "kiosk", "alcohol", "pub", "fast_food", "food_court", "bar", "biergarten", "beverages", "wine" }
 
 class RegionInfo:
-    def __init__(self, positive_main_structs_size, main_structs_quality_array, live_quality, positive_structures_count, negative_structures_count):
+    def __init__(self, reg_name, positive_main_structs_size, main_structs_quality_array, live_quality, positive_structures_count, negative_structures_count):
+        self.reg_name = reg_name
         self.positive_main_structs_size = positive_main_structs_size
         self.main_structs_quality_array = main_structs_quality_array
         self.live_quality = live_quality
@@ -45,7 +49,7 @@ def parks_searchbysity(Name):
 
         for way in result.ways:
             struct_type = way.tags.get("leisure", "Не указано")
-            if struct_type in ignore_structures:
+            if not struct_type in region_structures and not struct_type in city_structures:
                 continue
             data.append({
                 "Тип": struct_type,
@@ -75,9 +79,12 @@ def tobacco_searchbysity(Name):
         result = api.query(osm_query)
 
         for way in result.ways:
+            struct_name = way.tags.get("name", "null")
+            if struct_name == "null":
+                continue
             data.append({
                 "Тип": "tobacco",
-                "Название": way.tags.get("name", "Без названия"),
+                "Название": struct_name,
                 "Широта": way.center_lat,
                 "Долгота": way.center_lon
             })
@@ -103,7 +110,7 @@ def structures_searchbysity(Name):
 
         for way in result.ways:
             struct_type = way.tags.get("amenity", "Не указано")
-            if struct_type in ignore_structures:
+            if not struct_type in region_structures and not struct_type in city_structures and not struct_type in positive_structures and not struct_type in negative_structures:
                 continue
             data.append({
                 "Тип": struct_type,

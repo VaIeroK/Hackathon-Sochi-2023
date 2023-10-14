@@ -38,7 +38,7 @@ def get_distances_of_type(data, src_type, dest_type_list, max_radius = -1):
                     if dest_structure["Тип"] == dest_type:
                         dist = distance(structure["Широта"], structure["Долгота"], dest_structure["Широта"], dest_structure["Долгота"])
                         if dist < max_radius or max_radius == -1:
-                            dist_dict = { "Тип": dest_type, "Дистанция": round(dist, 2) }
+                            dist_dict = { "Тип": dest_type, "МейнНазвание": structure["Название"], "Название": dest_structure["Название"], "Дистанция": round(dist, 2) }
                             distances.append(dist_dict)
     return distances
 
@@ -55,6 +55,7 @@ def print_distances(main_structure, distances):
         print(f"Дистанция {dist["Тип"]} до {main_structure}: {dist["Дистанция"]} км")
 
 async def parse_city(city):
+    live_prompt = []
     live_quality = 0
     average_negative_distance = 0
     negative_distances_count = 0
@@ -71,15 +72,15 @@ async def parse_city(city):
     print(f"Средняя дистанция негативных объектов до парков поблизости: {round(average_negative_distance, 2)} км")
     if average_negative_distance > 0.2:
         live_quality = live_quality + 30
-        
+    else:
+        live_prompt.append(f"Необходимо ограничить парки от табачной и алкогольной продукции. Средняя дистанция до парков: {average_negative_distance}")    
     rayons = get_city_districts(city)
     positive_rayons = 0
     negative_rayons = 0
     
-    
     tasks = []
     for rayon_name in rayons:
-        tasks.append(parse_region(rayon_name))
+        tasks.append(parse_region(rayon_name, live_prompt))
     results = await asyncio.gather(*tasks)
     
     for rayon_data in results:
@@ -87,6 +88,7 @@ async def parse_city(city):
             positive_rayons += 1
         else:
             negative_rayons += 1
+            live_prompt.append(f"В {rayon_data.reg_name} положительные структуры не преобладают на 50% над негативными структурами: {rayon_data.positive_structures_count} vs {1.5 * rayon_data.negative_structures_count}")
 
     diff = positive_rayons - negative_rayons
     if diff >= 1:
@@ -94,8 +96,11 @@ async def parse_city(city):
         
     print(f"Хороших районов {diff} из {len(rayons)}")
     print(f"Качество жизни города {city}: {live_quality}")
+    print("prompt:")
+    for prompt in live_prompt:
+        print(prompt)
         
-async def parse_region(city):
+async def parse_region(city, live_prompt):
     reg_quality_struct_count = []
     live_quality = 0
     data = structures_searchbysity(city)
@@ -104,6 +109,9 @@ async def parse_region(city):
     negative_count = get_structures_count(data, negative_structures)
     for main_structure in region_structures:
         negative_dists = get_distances_of_type(data, main_structure, negative_structures, 0.1)
+        if len(negative_dists) != 0:
+            for neg_dist in negative_dists:
+                live_prompt.append(f"Возле {neg_dist["МейнНазвание"]} ({main_structure}) в радиусе 100м находится {neg_dist["Название"]} ({neg_dist["Тип"]})")
         reg_quality_struct_count.append({
             "ТочкаИнтереса": main_structure,
             "Благополучность": (len(negative_dists) == 0)
@@ -122,7 +130,7 @@ async def parse_region(city):
     #else:
         #print(f"Зло и негатив! {positive_count} vs {negative_count}")
     print(f"Качество жизни района {city}: {live_quality}")
-    return RegionInfo(positive_structs_count, reg_quality_struct_count, live_quality, positive_count, negative_count)
+    return RegionInfo(city, positive_structs_count, reg_quality_struct_count, live_quality, positive_count, negative_count)
     
 #print(len(tobacco_searchbysity("Сочи")))
 asyncio.run(parse_city("Ростов-на-Дону"))
