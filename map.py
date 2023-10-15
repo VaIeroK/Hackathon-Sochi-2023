@@ -11,13 +11,14 @@ positive_structures = { "civic", "stadium", "riding_hall", "sports_hall", "cycle
 negative_structures = { "tobacco", "kiosk", "alcohol", "pub", "fast_food", "food_court", "bar", "biergarten", "beverages", "wine" }
 
 class RegionInfo:
-    def __init__(self, reg_name, positive_main_structs_size, main_structs_quality_array, live_quality, positive_structures_count, negative_structures_count):
+    def __init__(self, reg_name, positive_main_structs_size, main_structs_quality_array, live_quality, positive_structures_count, negative_structures_count, sementeries_count):
         self.reg_name = reg_name
         self.positive_main_structs_size = positive_main_structs_size
         self.main_structs_quality_array = main_structs_quality_array
         self.live_quality = live_quality
         self.positive_structures_count = positive_structures_count
         self.negative_structures_count = negative_structures_count
+        self.sementeries_count = sementeries_count
 
 def convert_decimal_to_float(obj):
     if isinstance(obj, Decimal):
@@ -263,9 +264,10 @@ def search_cemeteries_in_city(city):
         lon = way.center_lon
         name = way.name
         cemeteries.append({
+            "Тип": "cemetery",
             "Долгота": lat,
             "Ширина": lon,
-            "Имя": name
+            "Название": name
         })
 
     with open(f"{city}_cemeteries.json", "w", encoding="utf-8") as json_file:

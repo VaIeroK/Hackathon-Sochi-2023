@@ -4,14 +4,18 @@ import os
 from math import sin, cos, sqrt, atan2, radians
 from decimal import Decimal
 from map import structures_searchbysity
+from map import search_cemeteries_in_city
 from map import get_city_districts
 from map import convert_decimal_to_float
 from map import RegionInfo
+import numpy as np
 
 region_structures = { "school", "kindergarten", "language_school", "music_school", "college", "university", "driving_school", "training", "driving_school", "dancing_school" }
 city_structures = { "theme_park", "zoo", "national_park", "park", "water_park", "trampoline_park", "fountain", "place_of_worship", "playground" }
 positive_structures = { "civic", "stadium", "riding_hall", "sports_hall", "cycleway", "ice_rink", "footway", "pitch", "track", "marketplace", "greengrocer", "farm", "playground" }
 negative_structures = { "tobacco", "kiosk", "alcohol", "pub", "fast_food", "food_court", "bar", "biergarten", "beverages", "wine" }
+
+negative_structures_translate = { "tobacco":"Табачная продукция", "alcohol":"Алкогольный магазин", "pub":"Бар", "fast_food":"Фастфуд", "food_court":"Фудкорт", "bar":"Бар", "biergarten":"Пивбар", "beverages":"Пивбар", "wine":"Винный магазин" }
 
 def distance(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -106,13 +110,16 @@ async def parse_city(city):
     for rayon_data in results:
         rayons_info.append({
             "Название": rayon_data.reg_name,
-            "Баллы": rayon_data.live_quality
+            "Баллы": rayon_data.live_quality,
+            "Кладбища": rayon_data.sementeries_count
         })
+        if rayon_data.sementeries_count > 0:
+            print(f"На территории района имеется {rayon_data.sementeries_count} кладбище, что может негативно влиять на ментальное здоровье жителей")     
         if rayon_data.positive_structures_count > 1.5 * rayon_data.negative_structures_count:
             positive_rayons += 1
         else:
             negative_rayons += 1
-            live_prompt.append(f"В {rayon_data.reg_name} положительные структуры не преобладают на 50% над негативными структурами: {rayon_data.positive_structures_count} vs {1.5 * rayon_data.negative_structures_count}")
+            live_prompt.append(f"В {rayon_data.reg_name} положительные объекты не преобладают на 50% над негативными объекты: {rayon_data.positive_structures_count} vs {1.5 * rayon_data.negative_structures_count}")
 
     with open(f"app_cache\\results\\{city}\\rayons.json", "w", encoding="utf-8") as json_file:
         json.dump(rayons_info, json_file, ensure_ascii=False, indent=4, default=convert_decimal_to_float)
@@ -127,6 +134,7 @@ async def parse_city(city):
         
     with open(f"app_cache\\results\\{city}\\info.json", "w", encoding="utf-8") as json_file:
         linfo = {
+            "AverageNegDist": average_negative_distance if average_negative_distance != None else -1,
             "LifeQuality": live_quality,
             "Name": city,
             "PositiveRayons": positive_rayons,
@@ -143,27 +151,34 @@ def parse_saved_data(city):
     prompt = []
     rayons = []
     
+    if os.path.exists(f"app_cache\\results\\{city}\\info.json"):
+        with open(f"app_cache\\results\\{city}\\info.json", 'r', encoding='utf-8') as f:
+            linfo = json.load(f)
+    
+    if linfo["AverageNegDist"] != -1:
+        print(f"Средняя дистанция негативных объектов до парков поблизости: {round(linfo["AverageNegDist"], 2)} км")
+    
     if os.path.exists(f"app_cache\\results\\{city}\\rayons.json"):
         with open(f"app_cache\\results\\{city}\\rayons.json", 'r', encoding='utf-8') as f:
             rayons = json.load(f)
             
     for rayon in rayons:
-        print(f"Качество жизни района {rayon["Название"]}: {rayon["Баллы"]}")        
-    
-    if os.path.exists(f"app_cache\\results\\{city}\\info.json"):
-        with open(f"app_cache\\results\\{city}\\info.json", 'r', encoding='utf-8') as f:
-            linfo = json.load(f)
+        print(f"Качество жизни района {rayon["Название"]}: {rayon["Баллы"]}")   
+        if rayon["Кладбища"] > 0:
+            print(f"На территории района имеется {rayon["Кладбища"]} кладбище, что может негативно влиять на ментальное здоровье жителей")     
             
     if os.path.exists(f"app_cache\\results\\{city}\\prompt.json"):
         with open(f"app_cache\\results\\{city}\\prompt.json", 'r', encoding='utf-8') as f:
             live_prompt = json.load(f)
             
     print(f"Хороших районов {linfo["PositiveRayons"]} из {linfo["AllRayons"]}")
-    print(f"Качество жизни города {city}: {linfo["LifeQuality"]}")
+    print(f"Качество жизни города {city}: {round(linfo["LifeQuality"], 0)}")
     print("prompt:")
     for prompt in live_prompt:
         print(prompt)
-    
+        
+def type_to_string(type):
+    return negative_structures_translate.get(type, "Неизвестный объект") 
         
 async def parse_region(city_name, rayon, live_prompt):
     reg_quality_struct_count = []
@@ -176,7 +191,7 @@ async def parse_region(city_name, rayon, live_prompt):
         negative_dists = get_distances_of_type(data, main_structure, negative_structures, 0.1)
         if len(negative_dists) != 0:
             for neg_dist in negative_dists:
-                live_prompt.append(f"Возле {neg_dist["МейнНазвание"]} ({main_structure}) в радиусе 100м находится {neg_dist["Название"]} ({neg_dist["Тип"]})")
+                live_prompt.append(f"Возле {neg_dist["МейнНазвание"]} в радиусе 100м находится ({type_to_string(neg_dist["Тип"])})")
         reg_quality_struct_count.append({
             "ТочкаИнтереса": main_structure,
             "Благополучность": (len(negative_dists) == 0)
@@ -196,9 +211,11 @@ async def parse_region(city_name, rayon, live_prompt):
         #print(f"Зло и негатив! {positive_count} vs {negative_count}")
     print(f"Качество жизни района {rayon}: {live_quality}")
     
-    return RegionInfo(rayon, positive_structs_count, reg_quality_struct_count, live_quality, positive_count, negative_count)
+    cementeries = search_cemeteries_in_city(rayon)
+
+    return RegionInfo(rayon, positive_structs_count, reg_quality_struct_count, live_quality, positive_count, negative_count, len(cementeries))
     
 #print(len(tobacco_searchbysity("Сочи")))
-#asyncio.run(parse_city("Ростов-на-Дону"))
-parse_saved_data("Ростов-на-Дону")
+asyncio.run(parse_city("Ростов-на-Дону"))
+#parse_saved_data("Ростов-на-Дону")
 #print(get_city_districts("Советский район"))
