@@ -262,7 +262,7 @@ def search_cemeteries_in_city(city):
     for way in result.ways:
         lat = way.center_lat
         lon = way.center_lon
-        name = way.name
+        name = ""
         cemeteries.append({
             "Тип": "cemetery",
             "Долгота": lat,
